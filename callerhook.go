@@ -15,7 +15,7 @@ callerInitOnce sync.Once
 
 const (
 	maximumCallerDepth int = 25
-	knownLogrusFrames  int = 4
+	knownHookFrames    int = 12
 )
 
 
@@ -29,9 +29,9 @@ type CallerHook struct {
 // NewHook returns new CallerHook.
 func NewHook(packageName string) *CallerHook {
 	hook := &CallerHook{
-		PackageName:    packageName,
-		MaximumCallerDepth:maximumCallerDepth,
-		MinimumCallerDepth:knownLogrusFrames,
+		PackageName:        packageName,
+		MaximumCallerDepth: maximumCallerDepth,
+		MinimumCallerDepth: knownHookFrames,
 	}
 
 	return hook
