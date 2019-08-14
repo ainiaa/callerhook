@@ -8,15 +8,9 @@ import (
 )
 
 var (
-
-	// qualified package name, cached at first use
+// Used for caller information initialisation
+callerInitOnce sync.Once
 	logrusPackage string
-
-	// Positions in the call stack when tracing to report the calling method
-	minimumCallerDepth int
-
-	// Used for caller information initialisation
-	callerInitOnce sync.Once
 )
 
 const (
@@ -28,12 +22,16 @@ const (
 // CallerHook is a hook to handle wrapper log's caller.
 type CallerHook struct {
 	PackageName string
+	MinimumCallerDepth int
+	MaximumCallerDepth int
 }
 
 // NewHook returns new CallerHook.
 func NewHook(packageName string) *CallerHook {
 	hook := &CallerHook{
 		PackageName:    packageName,
+		MaximumCallerDepth:maximumCallerDepth,
+		MinimumCallerDepth:knownLogrusFrames,
 	}
 
 	return hook
@@ -44,9 +42,19 @@ func (hook *CallerHook) SetPackageName(packageName string) *CallerHook{
 	return hook
 }
 
-// getPackageName reduces a fully qualified function name to the package name
+func (hook *CallerHook) SetMinimumCallerDepth(minimumCallerDepth int) *CallerHook{
+	hook.MinimumCallerDepth = minimumCallerDepth
+	return hook
+}
+
+func (hook *CallerHook) SetMaximumCallerDepth(maximumCallerDepth int) *CallerHook{
+	hook.MaximumCallerDepth = maximumCallerDepth
+	return hook
+}
+
+// GetPackageName reduces a fully qualified function name to the package name
 // There really ought to be to be a better way...
-func getPackageName(f string) string {
+func GetPackageName(f string) string {
 	for {
 		lastPeriod := strings.LastIndex(f, ".")
 		lastSlash := strings.LastIndex(f, "/")
@@ -63,25 +71,24 @@ func getPackageName(f string) string {
 // getCaller retrieves the name of the first non-logrus calling function
 func (hook *CallerHook)getCaller() *runtime.Frame {
 	// Restrict the lookback frames to avoid runaway lookups
-	pcs := make([]uintptr, maximumCallerDepth)
-	depth := runtime.Callers(minimumCallerDepth, pcs)
-	frames := runtime.CallersFrames(pcs[1:depth]) //psc[0]为runtime 需要过滤掉
+	pcs := make([]uintptr, hook.MaximumCallerDepth)
+	depth := runtime.Callers(hook.MinimumCallerDepth, pcs)
+	frames := runtime.CallersFrames(pcs[0:depth])
 
 	// cache this package's fully-qualified name
 	callerInitOnce.Do(func() {
 		if hook.PackageName != "" {
 			logrusPackage = hook.PackageName
 		} else {
-			logrusPackage = getPackageName(runtime.FuncForPC(pcs[1]).Name())
+			logrusPackage = GetPackageName(runtime.FuncForPC(pcs[0]).Name())
 		}
 
 		// now that we have the cache, we can skip a minimum count of known-logrus functions
 		// XXX this is dubious, the number of frames may vary store an entry in a logger interface
-		minimumCallerDepth = knownLogrusFrames
 	})
 
 	for f, again := frames.Next(); again; f, again = frames.Next() {
-		pkg := getPackageName(f.Function)
+		pkg := GetPackageName(f.Function)
 		// If the caller isn't part of this package, we're done
 		if pkg != logrusPackage {
 			return &f
