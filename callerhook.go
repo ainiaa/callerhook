@@ -104,3 +104,8 @@ func (hook *CallerHook) Fire(entry *logrus.Entry) error {
 	entry.Caller = hook.getCaller()
 	return nil
 }
+
+// Levels returns configured log levels.
+func (hook *CallerHook) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
